@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Hls from 'hls.js';
 import { Drama, Episode } from '@/types';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
@@ -16,10 +17,18 @@ interface VideoPlayerProps {
   currentIndex: number;
 }
 
+// Represents one selectable quality option shown in the UI
+interface QualityLevel {
+  label: string;   // e.g. "1080P", "720P", "Auto"
+  levelIndex: number; // -1 for Auto, otherwise the HLS level index
+  height?: number;
+}
+
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpisodes, currentIndex }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -28,10 +37,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [quality, setQuality] = useState('1080P');
   const [speed, setSpeed] = useState('1.0X');
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+
+  // --- HLS-driven quality state ---
+  const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
+  const [currentLevel, setCurrentLevel] = useState<number>(-1); // -1 = Auto
+  const [activeHeight, setActiveHeight] = useState<number | null>(null); // actual height currently playing (for Auto display)
+  const [isHlsSource, setIsHlsSource] = useState(false);
 
   const prevEpisode = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
   const nextEpisode = currentIndex < allEpisodes.length - 1 ? allEpisodes[currentIndex + 1] : null;
@@ -59,6 +73,104 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
     };
   }, []);
 
+  // ---------------------------------------------------------------------
+  // HLS.js SETUP — attaches whenever the episode/videoUrl changes
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !episode.videoUrl) return;
+
+    // Clean up any previous instance first
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    const isM3u8 = episode.videoUrl.includes('.m3u8');
+    setIsHlsSource(isM3u8);
+
+    if (isM3u8 && Hls.isSupported()) {
+      const hls = new Hls({
+        // Reasonable defaults for adaptive streaming
+        maxBufferLength: 30,
+        enableWorker: true,
+      });
+      hlsRef.current = hls;
+
+      hls.loadSource(episode.videoUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_evt, data) => {
+        const levels: QualityLevel[] = data.levels.map((lvl, idx) => ({
+          label: lvl.height ? `${lvl.height}P` : `${Math.round(lvl.bitrate / 1000)}kbps`,
+          levelIndex: idx,
+          height: lvl.height,
+        }));
+        // Sort high -> low, then add "Auto" at the top
+        levels.sort((a, b) => (b.height || 0) - (a.height || 0));
+        setQualityLevels([{ label: 'Auto', levelIndex: -1 }, ...levels]);
+        setCurrentLevel(-1); // default to Auto (ABR)
+      });
+
+      // Track which rendition is actually playing while in Auto mode
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_evt, data) => {
+        const lvl = hls.levels[data.level];
+        setActiveHeight(lvl?.height ?? null);
+      });
+
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (isM3u8 && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari has native HLS support — no quality menu available here,
+      // the OS-level player handles ABR internally.
+      video.src = episode.videoUrl;
+      setQualityLevels([]);
+    } else {
+      // Plain mp4 / non-HLS source — fall back to the native <video src>
+      video.src = episode.videoUrl;
+      setQualityLevels([]);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode.videoUrl]);
+
+  const selectQuality = (levelIndex: number) => {
+    setCurrentLevel(levelIndex);
+    if (hlsRef.current) {
+      // -1 tells hls.js to resume automatic bitrate switching
+      hlsRef.current.currentLevel = levelIndex;
+    }
+    setShowQualityMenu(false);
+  };
+
+  const currentQualityLabel = (() => {
+    if (!isHlsSource) return '1080P'; // static fallback label for plain mp4 sources
+    if (currentLevel === -1) {
+      return activeHeight ? `Auto (${activeHeight}P)` : 'Auto';
+    }
+    const found = qualityLevels.find(l => l.levelIndex === currentLevel);
+    return found?.label ?? 'Auto';
+  })();
+
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (isPlaying) {
@@ -66,7 +178,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
       setIsPlaying(false);
       setShowControls(true);
     } else {
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { });
       setIsPlaying(true);
       resetControlsTimer();
     }
@@ -125,7 +237,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
       {hasVideo ? (
         <video
           ref={videoRef}
-          src={episode.videoUrl}
           className="w-full h-full object-contain"
           onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
           onDurationChange={() => setDuration(videoRef.current?.duration || 0)}
@@ -246,25 +357,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
                 <Subtitles className="w-4 h-4" />
               </button>
 
-              {/* Quality selector */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowQualityMenu(p => !p); setShowSpeedMenu(false); }}
-                  className="px-2 py-0.5 text-[10px] sm:text-xs font-bold text-white border border-white/30 rounded hover:border-[#00E676] hover:text-[#00E676] transition-colors"
-                >
-                  {quality}
-                </button>
-                {showQualityMenu && (
-                  <div className="absolute bottom-8 right-0 bg-[#181B26] border border-slate-700 rounded-lg overflow-hidden text-xs z-50 shadow-xl">
-                    {['1080P', '720P', '480P', '360P'].map(q => (
-                      <button key={q} onClick={() => { setQuality(q); setShowQualityMenu(false); }}
-                        className={`block w-full px-4 py-2 text-left hover:bg-[#00E676]/10 hover:text-[#00E676] transition-colors ${quality === q ? 'text-[#00E676] font-bold' : 'text-slate-300'}`}>
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Quality selector — now driven by real HLS levels */}
+              {isHlsSource && qualityLevels.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowQualityMenu(p => !p); setShowSpeedMenu(false); }}
+                    className="px-2 py-0.5 text-[10px] sm:text-xs font-bold text-white border border-white/30 rounded hover:border-[#00E676] hover:text-[#00E676] transition-colors"
+                  >
+                    {currentQualityLabel}
+                  </button>
+                  {showQualityMenu && (
+                    <div className="absolute bottom-8 right-0 bg-[#181B26] border border-slate-700 rounded-lg overflow-hidden text-xs z-50 shadow-xl min-w-[100px]">
+                      {qualityLevels.map(q => (
+                        <button
+                          key={q.levelIndex}
+                          onClick={() => selectQuality(q.levelIndex)}
+                          className={`block w-full px-4 py-2 text-left hover:bg-[#00E676]/10 hover:text-[#00E676] transition-colors ${currentLevel === q.levelIndex ? 'text-[#00E676] font-bold' : 'text-slate-300'}`}
+                        >
+                          {q.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Speed selector */}
               <div className="relative hidden sm:block">
@@ -287,7 +403,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
               </div>
 
               {/* Picture-in-picture / monitor */}
-              <button className="p-1.5 text-white hover:text-[#00E676] transition-colors hidden lg:flex" title="Screen mode">
+              <button
+                onClick={() => videoRef.current?.requestPictureInPicture?.().catch(() => { })}
+                className="p-1.5 text-white hover:text-[#00E676] transition-colors hidden lg:flex"
+                title="Picture in Picture"
+              >
                 <Monitor className="w-4 h-4" />
               </button>
 

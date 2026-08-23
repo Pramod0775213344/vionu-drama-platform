@@ -9,7 +9,7 @@ export class AdminService {
   constructor(
     private prisma: PrismaService,
     private tmdbService: TmdbService,
-  ) {}
+  ) { }
 
   async getDashboardOverview() {
     const [
@@ -102,8 +102,8 @@ export class AdminService {
         studio: dto.studio,
         genres: dto.genreIds
           ? {
-              create: dto.genreIds.map((genreId) => ({ genreId })),
-            }
+            create: dto.genreIds.map((genreId) => ({ genreId })),
+          }
           : undefined,
       },
     });
