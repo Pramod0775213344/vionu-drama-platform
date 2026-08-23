@@ -46,6 +46,8 @@ export interface Episode {
   thumbnailUrl: string;
   videoUrl: string;
   videoProvider: string;
+  subtitleUrl?: string;
+  downloadUrl?: string;
   durationSeconds: number;
   isPremium: boolean;
   releaseDate?: string;

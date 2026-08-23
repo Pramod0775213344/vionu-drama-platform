@@ -471,13 +471,34 @@ function EpisodeManagerContent() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-bold mb-1">Video Stream URL (HLS .m3u8 or MP4) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-300 font-bold">Video Stream URL (Cloudflare R2 / HLS / MP4) *</label>
+                  {modalEpisode.id && (
+                    <Link
+                      href={`/upload?dramaId=${selectedDramaId}&episodeId=${modalEpisode.id}`}
+                      className="text-[#00E676] hover:underline font-bold text-[10px] flex items-center gap-1"
+                    >
+                      ☁️ Upload to R2
+                    </Link>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   value={modalEpisode.videoUrl || ''}
                   onChange={(e) => setModalEpisode({ ...modalEpisode, videoUrl: e.target.value })}
-                  placeholder="https://.../stream.m3u8"
+                  placeholder="https://.../stream.m3u8 or https://pub-xxx.r2.dev/videos/..."
+                  className="w-full bg-[#181C26] border border-slate-700 text-white rounded-xl p-2.5 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Sinhala Subtitle URL (.vtt / .srt)</label>
+                <input
+                  type="text"
+                  value={modalEpisode.subtitleUrl || ''}
+                  onChange={(e) => setModalEpisode({ ...modalEpisode, subtitleUrl: e.target.value })}
+                  placeholder="https://pub-xxx.r2.dev/subtitles/... (optional)"
                   className="w-full bg-[#181C26] border border-slate-700 text-white rounded-xl p-2.5 font-mono text-[11px]"
                 />
               </div>

@@ -17,7 +17,7 @@ import {
   Sparkles,
   Layers,
   ChevronRight,
-  Database
+  UploadCloud,
 } from 'lucide-react';
 
 interface NavItem {
@@ -31,6 +31,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'TMDB Importer', href: '/tmdb', icon: Search, badge: 'LIVE', badgeColor: 'bg-[#00E676] text-black' },
+  { label: 'R2 Media Uploader', href: '/upload', icon: UploadCloud, badge: 'R2', badgeColor: 'bg-cyan-400 text-black' },
   { label: 'Dramas Catalog', href: '/dramas', icon: Film },
   { label: 'Add New Drama', href: '/dramas/new', icon: PlusCircle },
   { label: 'Episode Manager', href: '/episodes', icon: Tv },

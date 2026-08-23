@@ -127,7 +127,9 @@ model Episode {
   description     String
   thumbnailUrl    String
   videoUrl        String
-  videoProvider   String         @default("CLOUDFLARE_STREAM")
+  videoProvider   String         @default("CLOUDFLARE_R2")
+  subtitleUrl     String?
+  downloadUrl     String?
   durationSeconds Int            @default(3600)
   isPremium       Boolean        @default(false)
   releaseDate     String?

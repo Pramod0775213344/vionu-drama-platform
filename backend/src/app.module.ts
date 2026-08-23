@@ -13,6 +13,7 @@ import { WatchHistoryModule } from './watch-history/watch-history.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { TmdbModule } from './tmdb/tmdb.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TmdbModule } from './tmdb/tmdb.module';
     ReviewsModule,
     AdminModule,
     TmdbModule,
+    StorageModule,
   ],
 })
 export class AppModule {}

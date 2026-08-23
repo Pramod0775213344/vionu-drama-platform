@@ -242,7 +242,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
           onDurationChange={() => setDuration(videoRef.current?.duration || 0)}
           onEnded={() => setIsPlaying(false)}
           onClick={togglePlay}
-        />
+          crossOrigin="anonymous"
+        >
+          {episode.subtitleUrl && (
+            <track
+              kind="subtitles"
+              label="Sinhala"
+              srcLang="si"
+              src={episode.subtitleUrl}
+              default
+            />
+          )}
+        </video>
       ) : (
         // Placeholder frame (no video URL seeded — shows poster/thumbnail)
         <div
