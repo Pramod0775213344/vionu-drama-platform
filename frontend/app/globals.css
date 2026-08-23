@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 14 16 21;
+    --surface: 24 27 38;
+    --card: 26 29 40;
+    --primary: 0 230 118;
+    --accent-gold: 255 215 0;
+  }
+
+  body {
+    background-color: #0E1015;
+    color: #F3F4F6;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* iQIYI Specific Colors & Badges */
+.bg-iq-dark {
+  background-color: #0E1015;
+}
+
+.bg-iq-[#00E676] {
+  background-color: #00E676;
+}
+
+.text-iq-green {
+  color: #00E676;
+}
+
+/* iQIYI Top 10 Giant Rank Numbers */
+.iq-rank-num {
+  font-size: 5.5rem;
+  font-weight: 900;
+  line-height: 1;
+  font-style: italic;
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(255, 255, 255, 0.4);
+  background: linear-gradient(180deg, #FFFFFF 0%, rgba(255, 255, 255, 0.1) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: 0 0 20px rgba(0, 230, 118, 0.3);
+}
+
+.group:hover .iq-rank-num {
+  -webkit-text-stroke: 2px #00E676;
+  background: linear-gradient(180deg, #00FF87 0%, #00C853 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Custom Glassmorphism Utility */
+.glass {
+  background: rgba(14, 16, 21, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(26, 29, 40, 0.95) 0%, rgba(22, 25, 34, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 230, 118, 0.6);
+  box-shadow: 0 0 25px rgba(0, 230, 118, 0.25);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0E1015;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #262B3B;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00E676;
+}
+
+/* Smooth Horizontal Scroll snap */
+.scroll-horizontal {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-horizontal::-webkit-scrollbar {
+  display: none;
+}
+

@@ -1,0 +1,208 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  role         String         @default("USER")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  watchlists   Watchlist[]
+  watchHistory WatchHistory[]
+  reviews      Review[]
+  ratings      Rating[]
+  tokens       RefreshToken[]
+  notifications Notification[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Drama {
+  id             String       @id @default(uuid())
+  title          String
+  originalTitle  String
+  slug           String       @unique
+  description    String
+  posterUrl      String
+  backdropUrl    String
+  releaseYear    Int
+  status         String       @default("COMPLETED")
+  totalEpisodes  Int          @default(16)
+  runtimeMinutes Int          @default(60)
+  director       String?
+  screenwriter   String?
+  studio         String?
+  country        String?      @default("CHINA")
+  hasSinhalaSub  Boolean      @default(true)
+  translatorName String?      @default("K-Flix Sub Team")
+  averageRating  Float        @default(0.0)
+  ratingCount    Int          @default(0)
+  isFeatured     Boolean      @default(false)
+  isTrending     Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+
+  genres       DramaGenre[]
+  actors       DramaActor[]
+  seasons      Season[]
+  episodes     Episode[]
+  watchlists   Watchlist[]
+  reviews      Review[]
+  ratings      Rating[]
+  watchHistory WatchHistory[]
+}
+
+model Genre {
+  id     String       @id @default(uuid())
+  name   String       @unique
+  slug   String       @unique
+  dramas DramaGenre[]
+}
+
+model DramaGenre {
+  dramaId String
+  genreId String
+  drama   Drama  @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  genre   Genre  @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([dramaId, genreId])
+}
+
+model Actor {
+  id           String       @id @default(uuid())
+  name         String
+  originalName String
+  photoUrl     String
+  bio          String?
+  birthDate    String?
+  dramas       DramaActor[]
+}
+
+model DramaActor {
+  dramaId       String
+  actorId       String
+  characterName String
+  roleType      String   @default("MAIN")
+  drama         Drama    @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  actor         Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@id([dramaId, actorId])
+}
+
+model Season {
+  id           String    @id @default(uuid())
+  dramaId      String
+  seasonNumber Int
+  title        String
+  releaseYear  Int?
+  drama        Drama     @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  episodes     Episode[]
+
+  @@unique([dramaId, seasonNumber])
+}
+
+model Episode {
+  id              String         @id @default(uuid())
+  seasonId        String
+  dramaId         String
+  episodeNumber   Int
+  title           String
+  description     String
+  thumbnailUrl    String
+  videoUrl        String
+  videoProvider   String         @default("CLOUDFLARE_STREAM")
+  durationSeconds Int            @default(3600)
+  isPremium       Boolean        @default(false)
+  releaseDate     String?
+  createdAt       DateTime       @default(now())
+
+  season       Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  drama        Drama          @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  watchHistory WatchHistory[]
+}
+
+model Watchlist {
+  id      String   @id @default(uuid())
+  userId  String
+  dramaId String
+  addedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drama Drama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dramaId])
+}
+
+model WatchHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  dramaId         String
+  episodeId       String
+  progressSeconds Int      @default(0)
+  totalSeconds    Int      @default(3600)
+  completed       Boolean  @default(false)
+  watchedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drama   Drama   @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeId])
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  dramaId   String
+  content   String
+  rating    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drama Drama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dramaId])
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  userId    String
+  dramaId   String
+  score     Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drama Drama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dramaId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("SYSTEM")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
