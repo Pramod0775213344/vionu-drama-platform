@@ -180,14 +180,12 @@ function UploadStudioContent() {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            // If mock upload endpoint or direct upload
-            resolve();
+            reject(new Error(`Cloudflare R2 upload failed with HTTP status ${xhr.status}. Check R2 Bucket CORS settings.`));
           }
         };
 
         xhr.onerror = () => {
-          // If direct CORS to R2 fails or in mock mode, treat as successful upload with presigned public URL
-          resolve();
+          reject(new Error('Cloudflare R2 upload blocked. Please add CORS Policy in Cloudflare Dashboard -> R2 -> Bucket Settings.'));
         };
 
         xhr.send(videoFile);

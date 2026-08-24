@@ -24,6 +24,58 @@ interface QualityLevel {
   height?: number;
 }
 
+interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+function parseSubtitleContent(content: string): SubtitleCue[] {
+  const cues: SubtitleCue[] = [];
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = normalized.split(/\n\s*\n/);
+
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    let timeLine = '';
+    const textLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.includes('-->')) {
+        timeLine = line;
+      } else if (timeLine) {
+        textLines.push(line);
+      }
+    }
+
+    if (timeLine && textLines.length > 0) {
+      const parts = timeLine.split('-->').map((p) => p.trim().replace(',', '.'));
+      if (parts.length >= 2) {
+        const parseSeconds = (tStr: string) => {
+          const clean = tStr.split(' ')[0]; // remove optional VTT styling tags
+          const segs = clean.split(':').map(Number);
+          if (segs.length === 3) {
+            return segs[0] * 3600 + segs[1] * 60 + segs[2];
+          } else if (segs.length === 2) {
+            return segs[0] * 60 + segs[1];
+          }
+          return 0;
+        };
+
+        const start = parseSeconds(parts[0]);
+        const end = parseSeconds(parts[1]);
+        const text = textLines.join('\n').replace(/<[^>]*>/g, '').trim();
+
+        if (end > start && text) {
+          cues.push({ start, end, text });
+        }
+      }
+    }
+  }
+
+  return cues;
+}
+
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpisodes, currentIndex }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,10 +93,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
+  // --- Subtitles state (supports both .vtt and .srt directly) ---
+  const [cues, setCues] = useState<SubtitleCue[]>([]);
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
+  const [currentSubtitle, setCurrentSubtitle] = useState('');
+
   // --- HLS-driven quality state ---
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentLevel, setCurrentLevel] = useState<number>(-1); // -1 = Auto
-  const [activeHeight, setActiveHeight] = useState<number | null>(null); // actual height currently playing (for Auto display)
+  const [activeHeight, setActiveHeight] = useState<number | null>(null);
   const [isHlsSource, setIsHlsSource] = useState(false);
 
   const prevEpisode = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
@@ -74,13 +131,47 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
   }, []);
 
   // ---------------------------------------------------------------------
-  // HLS.js SETUP — attaches whenever the episode/videoUrl changes
+  // SUBTITLE LOADER & PARSER
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (!episode.subtitleUrl) {
+      setCues([]);
+      setCurrentSubtitle('');
+      return;
+    }
+
+    fetch(episode.subtitleUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch subtitle file');
+        return res.text();
+      })
+      .then((text) => {
+        const parsed = parseSubtitleContent(text);
+        setCues(parsed);
+      })
+      .catch((err) => {
+        console.warn('Subtitle load error:', err);
+        setCues([]);
+      });
+  }, [episode.subtitleUrl]);
+
+  // Sync subtitle text with playback time
+  useEffect(() => {
+    if (!subtitleEnabled || cues.length === 0) {
+      setCurrentSubtitle('');
+      return;
+    }
+    const match = cues.find((c) => currentTime >= c.start && currentTime <= c.end);
+    setCurrentSubtitle(match ? match.text : '');
+  }, [currentTime, cues, subtitleEnabled]);
+
+  // ---------------------------------------------------------------------
+  // HLS.js & MP4 SETUP
   // ---------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !episode.videoUrl) return;
 
-    // Clean up any previous instance first
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -91,7 +182,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
 
     if (isM3u8 && Hls.isSupported()) {
       const hls = new Hls({
-        // Reasonable defaults for adaptive streaming
         maxBufferLength: 30,
         enableWorker: true,
       });
@@ -106,13 +196,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
           levelIndex: idx,
           height: lvl.height,
         }));
-        // Sort high -> low, then add "Auto" at the top
         levels.sort((a, b) => (b.height || 0) - (a.height || 0));
         setQualityLevels([{ label: 'Auto', levelIndex: -1 }, ...levels]);
-        setCurrentLevel(-1); // default to Auto (ABR)
+        setCurrentLevel(-1);
       });
 
-      // Track which rendition is actually playing while in Auto mode
       hls.on(Hls.Events.LEVEL_SWITCHED, (_evt, data) => {
         const lvl = hls.levels[data.level];
         setActiveHeight(lvl?.height ?? null);
@@ -134,12 +222,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         }
       });
     } else if (isM3u8 && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari has native HLS support — no quality menu available here,
-      // the OS-level player handles ABR internally.
       video.src = episode.videoUrl;
       setQualityLevels([]);
     } else {
-      // Plain mp4 / non-HLS source — fall back to the native <video src>
       video.src = episode.videoUrl;
       setQualityLevels([]);
     }
@@ -150,85 +235,92 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         hlsRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episode.videoUrl]);
 
   const selectQuality = (levelIndex: number) => {
     setCurrentLevel(levelIndex);
     if (hlsRef.current) {
-      // -1 tells hls.js to resume automatic bitrate switching
       hlsRef.current.currentLevel = levelIndex;
     }
     setShowQualityMenu(false);
   };
 
   const currentQualityLabel = (() => {
-    if (!isHlsSource) return '1080P'; // static fallback label for plain mp4 sources
     if (currentLevel === -1) {
-      return activeHeight ? `Auto (${activeHeight}P)` : 'Auto';
+      if (activeHeight) return `Auto (${activeHeight}P)`;
+      return 'Auto';
     }
-    const found = qualityLevels.find(l => l.levelIndex === currentLevel);
-    return found?.label ?? 'Auto';
+    const found = qualityLevels.find((q) => q.levelIndex === currentLevel);
+    return found ? found.label : 'Auto';
   })();
 
   const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setShowControls(true);
-    } else {
-      videoRef.current.play().catch(() => { });
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
       setIsPlaying(true);
-      resetControlsTimer();
+    } else {
+      video.pause();
+      setIsPlaying(false);
     }
+    resetControlsTimer();
   };
 
-  const seek = (seconds: number) => {
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+    resetControlsTimer();
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setVolume(val);
+    setIsMuted(val === 0);
+    if (videoRef.current) {
+      videoRef.current.volume = val;
+      videoRef.current.muted = val === 0;
     }
   };
 
   const toggleMute = () => {
     if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
+      const nextMuted = !isMuted;
+      videoRef.current.muted = nextMuted;
+      setIsMuted(nextMuted);
+      if (!nextMuted && volume === 0) {
+        setVolume(0.5);
+        videoRef.current.volume = 0.5;
+      }
     }
   };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = parseFloat(e.target.value);
-    setVolume(v);
-    if (videoRef.current) {
-      videoRef.current.volume = v;
-      setIsMuted(v === 0);
-    }
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const t = parseFloat(e.target.value);
-    setCurrentTime(t);
-    if (videoRef.current) videoRef.current.currentTime = t;
-  };
-
-  const toggleFullscreen = async () => {
-    if (!containerRef.current) return;
-    if (!isFullscreen) {
-      await containerRef.current.requestFullscreen?.();
-      setIsFullscreen(true);
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
     } else {
-      await document.exitFullscreen?.();
-      setIsFullscreen(false);
+      document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const skipSeconds = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    }
+    resetControlsTimer();
+  };
+
+  const progressPercent = duration ? (currentTime / duration) * 100 : 0;
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full bg-black aspect-video group select-none"
+      className="relative w-full bg-black aspect-video group select-none overflow-hidden"
       onMouseMove={resetControlsTimer}
       onMouseLeave={() => isPlaying && setShowControls(false)}
       onTouchStart={resetControlsTimer}
@@ -243,19 +335,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
           onEnded={() => setIsPlaying(false)}
           onClick={togglePlay}
           crossOrigin="anonymous"
-        >
-          {episode.subtitleUrl && (
-            <track
-              kind="subtitles"
-              label="Sinhala"
-              srcLang="si"
-              src={episode.subtitleUrl}
-              default
-            />
-          )}
-        </video>
+          playsInline
+        />
       ) : (
-        // Placeholder frame (no video URL seeded — shows poster/thumbnail)
         <div
           className="w-full h-full flex flex-col items-center justify-center bg-black cursor-pointer relative overflow-hidden"
           onClick={togglePlay}
@@ -276,18 +358,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         </div>
       )}
 
+      {/* ── CINEMATIC SUBTITLE OVERLAY ── */}
+      {subtitleEnabled && currentSubtitle && (
+        <div className="absolute bottom-16 sm:bottom-20 inset-x-4 flex justify-center pointer-events-none z-20">
+          <div className="bg-black/80 text-white px-4 py-1.5 rounded-lg text-sm sm:text-base md:text-lg font-bold text-center leading-relaxed backdrop-blur-sm border border-white/10 shadow-2xl max-w-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] transition-all">
+            {currentSubtitle}
+          </div>
+        </div>
+      )}
+
       {/* OVERLAY CONTROLS — fade in/out */}
       <div className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
 
-        {/* Top bar: episode title + settings icon */}
-        <div className="px-4 pt-3 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent">
-          <p className="text-xs sm:text-sm font-semibold text-white truncate max-w-[70%]">
+        {/* Top bar: episode title + info */}
+        <div className="px-4 pt-3 flex items-center justify-between bg-gradient-to-b from-black/75 to-transparent">
+          <p className="text-xs sm:text-sm font-semibold text-white truncate max-w-[70%] drop-shadow-md">
             {drama.title} · Ep {episode.episodeNumber} — {episode.title}
           </p>
           <div className="flex items-center gap-2">
-            <button className="p-1.5 rounded text-slate-300 hover:text-white transition-colors">
-              <Settings className="w-4 h-4" />
-            </button>
+            {episode.subtitleUrl && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#00E676]/20 text-[#00E676] border border-[#00E676]/30">
+                සිංහල SUB
+              </span>
+            )}
           </div>
         </div>
 
@@ -295,7 +388,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         <div className="flex-1 cursor-pointer" onClick={togglePlay}>
           {!isPlaying && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-16 h-16 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/30">
+              <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-2xl">
                 <Play className="w-7 h-7 fill-white text-white translate-x-0.5" />
               </div>
             </div>
@@ -303,7 +396,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         </div>
 
         {/* Bottom controls bar */}
-        <div className="px-3 pb-3 bg-gradient-to-t from-black/80 to-transparent space-y-1">
+        <div className="px-3 pb-3 bg-gradient-to-t from-black/85 to-transparent space-y-1">
           {/* Progress bar */}
           <div className="relative group/bar">
             <input
@@ -319,34 +412,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
             />
           </div>
 
-          {/* Controls Row */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pt-1">
             {/* Left controls */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              {/* Rewind 15s */}
-              <button onClick={() => seek(-15)} className="p-1.5 text-white hover:text-[#00E676] transition-colors" title="Rewind 15s">
-                <SkipBack className="w-4 h-4" />
-              </button>
-
-              {/* Play/Pause */}
+            <div className="flex items-center gap-2 sm:gap-3">
               <button onClick={togglePlay} className="p-1.5 text-white hover:text-[#00E676] transition-colors">
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-white" />}
               </button>
 
-              {/* Forward 15s */}
-              <button onClick={() => seek(15)} className="p-1.5 text-white hover:text-[#00E676] transition-colors" title="Forward 15s">
+              <button onClick={() => skipSeconds(-10)} className="p-1.5 text-slate-300 hover:text-white transition-colors" title="Rewind 10s">
+                <SkipBack className="w-4 h-4" />
+              </button>
+              <button onClick={() => skipSeconds(10)} className="p-1.5 text-slate-300 hover:text-white transition-colors" title="Forward 10s">
                 <SkipForward className="w-4 h-4" />
               </button>
 
-              {/* Next episode */}
+              {prevEpisode && (
+                <Link href={`/watch/${drama.slug}/${prevEpisode.episodeNumber}`} className="p-1.5 text-slate-400 hover:text-white transition-colors" title={`Previous: Ep ${prevEpisode.episodeNumber}`}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Link>
+              )}
               {nextEpisode && (
-                <Link href={`/watch/${drama.slug}/${nextEpisode.id}`} className="p-1.5 text-white hover:text-[#00E676] transition-colors hidden sm:flex" title="Next Episode">
+                <Link href={`/watch/${drama.slug}/${nextEpisode.episodeNumber}`} className="p-1.5 text-slate-400 hover:text-white transition-colors" title={`Next: Ep ${nextEpisode.episodeNumber}`}>
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               )}
 
-              {/* Time */}
-              <span className="text-white text-[10px] sm:text-xs font-mono ml-1 whitespace-nowrap">
+              <span className="text-[10px] sm:text-xs text-slate-400 font-mono ml-1">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
@@ -363,12 +454,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
                 className="w-14 h-1 hidden sm:block appearance-none accent-[#00E676] cursor-pointer"
               />
 
-              {/* Subtitle button */}
-              <button className="p-1.5 text-white hover:text-[#00E676] transition-colors hidden md:flex" title="Subtitles">
-                <Subtitles className="w-4 h-4" />
-              </button>
+              {/* Subtitle toggle button */}
+              {episode.subtitleUrl && (
+                <button
+                  onClick={() => setSubtitleEnabled((p) => !p)}
+                  className={`p-1.5 rounded transition-colors ${
+                    subtitleEnabled
+                      ? 'text-[#00E676] bg-[#00E676]/10 border border-[#00E676]/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={subtitleEnabled ? 'Subtitles: ON' : 'Subtitles: OFF'}
+                >
+                  <Subtitles className="w-4 h-4" />
+                </button>
+              )}
 
-              {/* Quality selector — now driven by real HLS levels */}
+              {/* Quality selector */}
               {isHlsSource && qualityLevels.length > 0 && (
                 <div className="relative">
                   <button
