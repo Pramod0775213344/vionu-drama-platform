@@ -7,7 +7,7 @@ import { Drama, Episode } from '@/types';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Maximize, Minimize, Settings, MessageSquare, Bookmark, Share2,
-  ChevronLeft, ChevronRight, Subtitles, Gauge, Monitor
+  ChevronLeft, ChevronRight, Subtitles, Gauge, Monitor, Loader2
 } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -83,8 +83,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
   const hlsRef = useRef<Hls | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [bufferedEnd, setBufferedEnd] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -315,7 +317,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
     resetControlsTimer();
   };
 
+  const updateBufferedProgress = () => {
+    const video = videoRef.current;
+    if (!video || !video.buffered.length) return;
+    try {
+      const current = video.currentTime;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.buffered.start(i) <= current && current <= video.buffered.end(i)) {
+          setBufferedEnd(video.buffered.end(i));
+          break;
+        }
+      }
+    } catch {}
+  };
+
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
+  const bufferedPercent = duration ? (bufferedEnd / duration) * 100 : 0;
 
   return (
     <div
@@ -330,9 +347,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         <video
           ref={videoRef}
           className="w-full h-full object-contain"
-          onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
+          onTimeUpdate={() => {
+            setCurrentTime(videoRef.current?.currentTime || 0);
+            updateBufferedProgress();
+          }}
+          onProgress={updateBufferedProgress}
           onDurationChange={() => setDuration(videoRef.current?.duration || 0)}
-          onEnded={() => setIsPlaying(false)}
+          onWaiting={() => setIsBuffering(true)}
+          onSeeking={() => setIsBuffering(true)}
+          onCanPlay={() => setIsBuffering(false)}
+          onPlaying={() => {
+            setIsBuffering(false);
+            setIsPlaying(true);
+          }}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          }}
           onClick={togglePlay}
           crossOrigin="anonymous"
           playsInline
@@ -355,6 +387,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
             <p className="text-sm font-bold text-slate-300">{drama.title} — Episode {episode.episodeNumber}</p>
             <p className="text-xs text-slate-500">සිංහල Subtitle | HD Quality</p>
           </div>
+        </div>
+      )}
+
+      {/* ── BUFFERING SPINNER OVERLAY ── */}
+      {isBuffering && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-30 bg-black/30 backdrop-blur-[2px]">
+          <div className="w-16 h-16 rounded-2xl bg-black/80 border border-[#00E676]/40 flex items-center justify-center shadow-[0_0_30px_rgba(0,230,118,0.3)] animate-pulse">
+            <Loader2 className="w-8 h-8 text-[#00E676] animate-spin" />
+          </div>
+          <span className="mt-3 text-xs font-bold tracking-wider text-[#00E676] uppercase drop-shadow-md">
+            Buffering...
+          </span>
         </div>
       )}
 
@@ -386,7 +430,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
 
         {/* Center click zone */}
         <div className="flex-1 cursor-pointer" onClick={togglePlay}>
-          {!isPlaying && (
+          {!isPlaying && !isBuffering && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-2xl">
                 <Play className="w-7 h-7 fill-white text-white translate-x-0.5" />
@@ -397,17 +441,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
 
         {/* Bottom controls bar */}
         <div className="px-3 pb-3 bg-gradient-to-t from-black/85 to-transparent space-y-1">
-          {/* Progress bar */}
-          <div className="relative group/bar">
+          {/* Progress bar with buffered range */}
+          <div className="relative group/bar h-3 flex items-center">
+            {/* Background track */}
+            <div className="absolute inset-x-0 h-1 bg-white/10 rounded-full overflow-hidden">
+              {/* Buffered progress track */}
+              <div
+                className="h-full bg-white/25 transition-all duration-300"
+                style={{ width: `${Math.min(100, bufferedPercent)}%` }}
+              />
+            </div>
+
             <input
               type="range"
               min={0}
               max={duration || 100}
               value={currentTime}
               onChange={handleSeek}
-              className="w-full h-1 appearance-none bg-white/20 rounded-full cursor-pointer accent-[#00E676]"
+              className="w-full h-1 appearance-none bg-transparent rounded-full cursor-pointer accent-[#00E676] relative z-10"
               style={{
-                background: `linear-gradient(to right, #00E676 ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`
+                background: `linear-gradient(to right, #00E676 ${progressPercent}%, transparent ${progressPercent}%)`
               }}
             />
           </div>
