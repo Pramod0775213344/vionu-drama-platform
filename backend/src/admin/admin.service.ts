@@ -249,13 +249,55 @@ export class AdminService {
       }
     }
 
-    return this.prisma.drama.update({
+    const updated = await this.prisma.drama.update({
       where: { id },
       data: rest,
       include: {
         genres: { include: { genre: true } },
       },
     });
+
+    // Auto-sync episode records if totalEpisodes changed
+    if (dto.totalEpisodes && dto.totalEpisodes > 0) {
+      const newTotal = Number(dto.totalEpisodes);
+      const currentEpisodes = await this.prisma.episode.findMany({
+        where: { dramaId: id },
+        orderBy: { episodeNumber: 'asc' },
+      });
+
+      let season = await this.prisma.season.findFirst({ where: { dramaId: id } });
+      if (!season) {
+        season = await this.prisma.season.create({
+          data: { dramaId: id, seasonNumber: 1, title: 'Season 1' },
+        });
+      }
+
+      if (currentEpisodes.length < newTotal) {
+        const highestEp = currentEpisodes.length > 0
+          ? Math.max(...currentEpisodes.map((e) => e.episodeNumber))
+          : 0;
+
+        const toCreate = [];
+        for (let i = highestEp + 1; i <= newTotal; i++) {
+          toCreate.push({
+            dramaId: id,
+            seasonId: season.id,
+            episodeNumber: i,
+            title: `Episode ${i}`,
+            description: `${updated.title} - Episode ${i}`,
+            thumbnailUrl: updated.backdropUrl || updated.posterUrl || '',
+            videoUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+            videoProvider: 'CLOUDFLARE_R2',
+            durationSeconds: (updated.runtimeMinutes || 60) * 60,
+          });
+        }
+        if (toCreate.length > 0) {
+          await this.prisma.episode.createMany({ data: toCreate });
+        }
+      }
+    }
+
+    return updated;
   }
 
   async deleteDrama(id: string) {
@@ -315,7 +357,7 @@ export class AdminService {
       }
     }
 
-    return this.prisma.episode.create({
+    const episode = await this.prisma.episode.create({
       data: {
         dramaId: dto.dramaId,
         seasonId: seasonId!,
@@ -332,6 +374,15 @@ export class AdminService {
         releaseDate: dto.releaseDate,
       },
     });
+
+    // Keep drama totalEpisodes updated
+    const count = await this.prisma.episode.count({ where: { dramaId: dto.dramaId } });
+    await this.prisma.drama.update({
+      where: { id: dto.dramaId },
+      data: { totalEpisodes: Math.max(count, dto.episodeNumber) },
+    });
+
+    return episode;
   }
 
   async updateEpisode(id: string, dto: any) {
@@ -342,9 +393,21 @@ export class AdminService {
   }
 
   async deleteEpisode(id: string) {
-    return this.prisma.episode.delete({
+    const ep = await this.prisma.episode.findUnique({ where: { id } });
+    if (!ep) throw new NotFoundException('Episode not found');
+
+    const deleted = await this.prisma.episode.delete({
       where: { id },
     });
+
+    // Auto-update drama totalEpisodes count
+    const count = await this.prisma.episode.count({ where: { dramaId: ep.dramaId } });
+    await this.prisma.drama.update({
+      where: { id: ep.dramaId },
+      data: { totalEpisodes: count },
+    });
+
+    return deleted;
   }
 
   async bulkCreateEpisodes(dto: { dramaId: string; count: number; templateVideoUrl?: string }) {
