@@ -247,9 +247,10 @@ export default function TrendingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchApi<{ data: Drama[] }>('/dramas')
+    fetchApi<any>('/dramas')
       .then((res) => {
-        setDramas(res.data || []);
+        const list = Array.isArray(res) ? res : (res?.data || []);
+        setDramas(list);
         setLoading(false);
       })
       .catch(() => setLoading(false));

@@ -11,7 +11,7 @@ async function bootstrap() {
     .map((o) => o.trim());
 
   app.enableCors({
-    origin: origins.length > 1 ? origins : origins[0] || true,
+    origin: true,
     credentials: true,
   });
 

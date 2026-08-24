@@ -288,11 +288,10 @@ export function CountryDramaPage({ country }: CountryDramaPageProps) {
   const pageTitle = isKorea ? 'K-Drama' : 'C-Drama';
 
   useEffect(() => {
-    fetchApi<{ data: Drama[] }>(`/dramas?country=${country}&limit=100`)
-      .then(res => {
-        // Always filter client-side as a safety-net
-        const all = res.data || [];
-        const filtered = all.filter(d => d.country === country);
+    fetchApi<any>(`/dramas?country=${country}&limit=100`)
+      .then((res) => {
+        const all = Array.isArray(res) ? res : (res?.data || []);
+        const filtered = all.filter((d: Drama) => d.country === country);
         setDramas(filtered);
         setLoading(false);
       })
@@ -349,42 +348,61 @@ export function CountryDramaPage({ country }: CountryDramaPageProps) {
         </span>
       </div>
 
-      {/* ── ROW: Most Popular ── */}
-      <DramaRow
-        title="Most Popular"
-        icon={<TrendingUp className="w-4 h-4" style={{ color: accentColor }} />}
-        dramas={byRating}
-        accent={accentColor}
-      />
+      {dramas.length === 0 ? (
+        <div className="text-center py-24 space-y-4 px-4">
+          <span className="text-5xl">{flagEmoji}</span>
+          <h2 className="text-xl font-bold text-white">No {pageTitle}s Available Right Now</h2>
+          <p className="text-sm text-slate-400 max-w-md mx-auto">
+            Stay tuned! New {countryLabel} series with Sinhala subtitles are added regularly.
+          </p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 rounded-full font-bold text-black hover:brightness-110 transition-all"
+            style={{ backgroundColor: accentColor }}
+          >
+            Explore Available Titles
+          </Link>
+        </div>
+      ) : (
+        <>
+          {/* ── ROW: Most Popular ── */}
+          <DramaRow
+            title="Most Popular"
+            icon={<TrendingUp className="w-4 h-4" style={{ color: accentColor }} />}
+            dramas={byRating}
+            accent={accentColor}
+          />
 
-      {/* ── ROW: Highest Rated ── */}
-      <DramaRow
-        title="Highest Rated"
-        icon={<Award className="w-4 h-4" style={{ color: accentColor }} />}
-        dramas={byScore}
-        accent={accentColor}
-      />
+          {/* ── ROW: Highest Rated ── */}
+          <DramaRow
+            title="Highest Rated"
+            icon={<Award className="w-4 h-4" style={{ color: accentColor }} />}
+            dramas={byScore}
+            accent={accentColor}
+          />
 
-      {/* ── ROW: Latest Releases ── */}
-      <DramaRow
-        title="Latest Releases"
-        icon={<Clock className="w-4 h-4" style={{ color: accentColor }} />}
-        dramas={byYear}
-        accent={accentColor}
-      />
+          {/* ── ROW: Latest Releases ── */}
+          <DramaRow
+            title="Latest Releases"
+            icon={<Clock className="w-4 h-4" style={{ color: accentColor }} />}
+            dramas={byYear}
+            accent={accentColor}
+          />
 
-      {/* ── ROW: Completed Only ── */}
-      {completed.length > 0 && (
-        <DramaRow
-          title="Completed Series"
-          icon={<Filter className="w-4 h-4" style={{ color: accentColor }} />}
-          dramas={completed}
-          accent={accentColor}
-        />
+          {/* ── ROW: Completed Only ── */}
+          {completed.length > 0 && (
+            <DramaRow
+              title="Completed Series"
+              icon={<Filter className="w-4 h-4" style={{ color: accentColor }} />}
+              dramas={completed}
+              accent={accentColor}
+            />
+          )}
+
+          {/* ── FULL GRID ── */}
+          <FullGrid dramas={byRating} accent={accentColor} />
+        </>
       )}
-
-      {/* ── FULL GRID ── */}
-      <FullGrid dramas={byRating} accent={accentColor} />
     </div>
   );
 }
