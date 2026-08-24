@@ -412,11 +412,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
         </div>
       )}
 
-      {/* ── CINEMATIC SUBTITLE OVERLAY ── */}
+      {/* ── CINEMATIC SUBTITLE OVERLAY (Opaque to cleanly mask hardcoded video subs) ── */}
       {subtitleEnabled && currentSubtitle && (
-        <div className="absolute bottom-16 sm:bottom-20 inset-x-4 flex justify-center pointer-events-none z-20">
-          <div className="bg-black/80 text-white px-4 py-1.5 rounded-lg text-sm sm:text-base md:text-lg font-bold text-center leading-relaxed backdrop-blur-sm border border-white/10 shadow-2xl max-w-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] transition-all">
-            {currentSubtitle}
+        <div className="absolute bottom-12 sm:bottom-16 md:bottom-20 inset-x-2 sm:inset-x-6 flex justify-center pointer-events-none z-20">
+          <div className="bg-black/95 text-[#FFF] px-5 sm:px-8 py-2 sm:py-3.5 rounded-xl text-base sm:text-2xl md:text-3xl lg:text-[32px] font-black text-center leading-snug tracking-wide shadow-[0_4px_30px_rgba(0,0,0,1)] border border-white/15 max-w-4xl backdrop-blur-md">
+            <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,1)] text-[#FFFF44]">
+              {currentSubtitle}
+            </span>
           </div>
         </div>
       )}
