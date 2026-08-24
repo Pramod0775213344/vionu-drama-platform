@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 async function getDramaDetails(slug: string): Promise<Drama | null> {
   try {
-    return await fetchApi<Drama>(`/dramas/${slug}`, { cache: 'no-store' });
+    return await fetchApi<Drama>(`/dramas/${slug}`, { next: { revalidate: 30 } } as any);
   } catch (error) {
     console.error(`Failed to fetch drama details for ${slug}:`, error);
     return null;

@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   },
 };
 
+import { NavigationProgressBar } from '@/components/navigation/NavigationProgressBar';
+import { Suspense } from 'react';
+
 export default function RootLayout({
   children,
 }: {
@@ -24,6 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#0E1015] text-slate-100 min-h-screen flex flex-col antialiased">
+        <Suspense fallback={null}>
+          <NavigationProgressBar />
+        </Suspense>
         <Navbar />
         <main className="flex-1 pt-14 sm:pt-16">{children}</main>
         <Footer />

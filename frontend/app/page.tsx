@@ -17,7 +17,7 @@ async function getHomeData() {
       topRated?: Drama[];
       romance?: Drama[];
       action?: Drama[];
-    }>('/dramas/home', { cache: 'no-store' });
+    }>('/dramas/home', { next: { revalidate: 30 } } as any);
     return data;
   } catch (error) {
     console.error('Failed to fetch home page data from backend:', error);
@@ -27,7 +27,7 @@ async function getHomeData() {
 
 async function getAllDramas() {
   try {
-    const res = await fetchApi<{ data: Drama[] } | Drama[]>('/dramas?limit=100', { cache: 'no-store' });
+    const res = await fetchApi<{ data: Drama[] } | Drama[]>('/dramas?limit=100', { next: { revalidate: 30 } } as any);
     if (Array.isArray(res)) return res;
     return res?.data || [];
   } catch {
