@@ -133,7 +133,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
   }, []);
 
   // ---------------------------------------------------------------------
-  // SUBTITLE LOADER & PARSER
+  // SUBTITLE LOADER & PARSER (Bypasses browser CORS using proxy)
   // ---------------------------------------------------------------------
   useEffect(() => {
     if (!episode.subtitleUrl) {
@@ -142,9 +142,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ episode, drama, allEpi
       return;
     }
 
-    fetch(episode.subtitleUrl)
+    const targetUrl = episode.subtitleUrl;
+    const nextProxy = `/api/subtitle?url=${encodeURIComponent(targetUrl)}`;
+    const backendProxy = `http://145.241.195.29:4000/api/v1/storage/subtitle-proxy?url=${encodeURIComponent(targetUrl)}`;
+
+    // Try Next.js internal proxy -> backend proxy -> direct fetch
+    fetch(nextProxy)
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch subtitle file');
+        if (!res.ok) return fetch(backendProxy);
+        return res;
+      })
+      .then((res) => {
+        if (!res.ok) return fetch(targetUrl);
+        return res;
+      })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       })
       .then((text) => {

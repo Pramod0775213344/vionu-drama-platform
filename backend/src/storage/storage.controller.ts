@@ -6,10 +6,12 @@ import {
   Body,
   Query,
   Param,
+  Res,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from './storage.service';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
@@ -23,6 +25,27 @@ export class StorageController {
   @Get('status')
   getStatus() {
     return this.storageService.getStatus();
+  }
+
+  @ApiOperation({ summary: 'Proxy subtitle file from R2 to bypass browser CORS restrictions' })
+  @Get('subtitle-proxy')
+  async proxySubtitle(@Query('url') url: string, @Res() res: Response) {
+    if (!url) {
+      throw new BadRequestException('url is required');
+    }
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new BadRequestException(`Failed to fetch subtitle file: ${response.statusText}`);
+      }
+      const text = await response.text();
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(text);
+    } catch (e: any) {
+      throw new BadRequestException(e.message || 'Subtitle proxy failed');
+    }
   }
 
   @ApiOperation({ summary: 'Get Presigned Upload URL for direct client-to-R2 upload (Videos & Subtitles)' })
