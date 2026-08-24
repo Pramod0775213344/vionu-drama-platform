@@ -312,10 +312,10 @@ export const DramaDetailView: React.FC<DramaDetailViewProps> = ({ drama }) => {
                     <div className="relative aspect-video rounded-lg overflow-hidden bg-[#181B26] border border-slate-800 group-hover:border-[#00E676]/70 shadow-md transition-all">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={ep.thumbnailUrl || drama.backdropUrl || drama.posterUrl}
+                        src={(ep.thumbnailUrl || drama.backdropUrl || drama.posterUrl || '').replace('w1284_and_h721_multi_faces', 'w780')}
                         alt={`Episode ${ep.episodeNumber}`}
                         onError={(e) => {
-                          e.currentTarget.src = drama.backdropUrl || drama.posterUrl;
+                          e.currentTarget.src = (drama.backdropUrl || drama.posterUrl || '').replace('w1284_and_h721_multi_faces', 'w780');
                         }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
