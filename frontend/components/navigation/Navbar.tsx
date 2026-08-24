@@ -107,10 +107,10 @@ export const Navbar = () => {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 border-b transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${
         isScrolled
-          ? 'bg-[#0E1015]/95 backdrop-blur-md border-white/5 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.85)]'
-          : 'bg-gradient-to-b from-[#0E1015] via-[#0E1015]/70 to-transparent border-transparent py-3'
+          ? 'bg-[#0E1015]/95 backdrop-blur-md py-3 shadow-[0_8px_30px_rgba(0,0,0,0.85)]'
+          : 'bg-gradient-to-b from-[#0E1015] via-[#0E1015]/60 to-transparent py-3'
       }`}
     >
       <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8">
