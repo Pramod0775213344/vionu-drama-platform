@@ -294,7 +294,22 @@ export class AdminService {
         if (toCreate.length > 0) {
           await this.prisma.episode.createMany({ data: toCreate });
         }
+      } else if (currentEpisodes.length > newTotal) {
+        // Trim excess episodes beyond newTotal
+        await this.prisma.episode.deleteMany({
+          where: {
+            dramaId: id,
+            episodeNumber: { gt: newTotal },
+          },
+        });
       }
+    }
+
+    if (dto.runtimeMinutes && Number(dto.runtimeMinutes) > 0) {
+      await this.prisma.episode.updateMany({
+        where: { dramaId: id },
+        data: { durationSeconds: Number(dto.runtimeMinutes) * 60 },
+      });
     }
 
     return updated;
