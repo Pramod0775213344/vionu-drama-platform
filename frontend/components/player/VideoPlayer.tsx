@@ -32,43 +32,40 @@ interface SubtitleCue {
 
 function parseSubtitleContent(content: string): SubtitleCue[] {
   const cues: SubtitleCue[] = [];
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const blocks = normalized.split(/\n\s*\n/);
+  const cleanContent = content.replace(/\r/g, '').trim();
+  const timeRegex = /(\d{1,2}:)?(\d{2}):(\d{2})[,.](\d{2,3})\s*-->\s*(\d{1,2}:)?(\d{2}):(\d{2})[,.](\d{2,3})/;
+  const blocks = cleanContent.split(/\n\s*\n/);
 
   for (const block of blocks) {
     const lines = block.trim().split('\n');
-    let timeLine = '';
-    const textLines: string[] = [];
+    let timeMatch = null;
+    let timeIndex = -1;
 
-    for (const line of lines) {
-      if (line.includes('-->')) {
-        timeLine = line;
-      } else if (timeLine) {
-        textLines.push(line);
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(timeRegex);
+      if (match) {
+        timeMatch = lines[i];
+        timeIndex = i;
+        break;
       }
     }
 
-    if (timeLine && textLines.length > 0) {
-      const parts = timeLine.split('-->').map((p) => p.trim().replace(',', '.'));
-      if (parts.length >= 2) {
-        const parseSeconds = (tStr: string) => {
-          const clean = tStr.split(' ')[0]; // remove optional VTT styling tags
-          const segs = clean.split(':').map(Number);
-          if (segs.length === 3) {
-            return segs[0] * 3600 + segs[1] * 60 + segs[2];
-          } else if (segs.length === 2) {
-            return segs[0] * 60 + segs[1];
-          }
-          return 0;
-        };
+    if (timeIndex !== -1 && timeMatch) {
+      const parts = timeMatch.split('-->').map((s) => s.trim().replace(',', '.'));
+      const parseTime = (tStr: string) => {
+        const seg = tStr.split(' ')[0].split(':').map(Number);
+        if (seg.length === 3) return seg[0] * 3600 + seg[1] * 60 + seg[2];
+        if (seg.length === 2) return seg[0] * 60 + seg[1];
+        return 0;
+      };
 
-        const start = parseSeconds(parts[0]);
-        const end = parseSeconds(parts[1]);
-        const text = textLines.join('\n').replace(/<[^>]*>/g, '').trim();
+      const start = parseTime(parts[0]);
+      const end = parseTime(parts[1]);
+      const textLines = lines.slice(timeIndex + 1);
+      const text = textLines.join('\n').replace(/<[^>]*>/g, '').trim();
 
-        if (end > start && text) {
-          cues.push({ start, end, text });
-        }
+      if (end > start && text) {
+        cues.push({ start, end, text });
       }
     }
   }
